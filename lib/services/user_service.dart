@@ -32,6 +32,30 @@ class UserService {
     }
   }
 
+  Future<User?> updateProfile({
+    String? name,
+    String? username,
+    String? bio,
+  }) async {
+    try {
+      final body = <String, dynamic>{};
+      if (name != null) body['name'] = name;
+      if (username != null) body['username'] = username;
+      if (bio != null) body['bio'] = bio;
+
+      final response = await _api.put(
+        '${ApiConfig.profilesApi}/me',
+        body: body,
+      );
+      if (response['user'] != null) {
+        return User.fromJson(response['user']);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   Future<List<User>> searchUsers(String query) async {
     try {
       final response = await _api.get(

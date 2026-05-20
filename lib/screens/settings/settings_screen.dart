@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../config/theme.dart';
 import '../login_screen.dart';
+import '../profile/edit_profile_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -18,7 +19,13 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         children: [
           _buildSection('Account', [
-            _buildItem(Icons.person, 'Edit Profile', () {}),
+            _buildItem(Icons.person, 'Edit Profile', () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const EditProfileScreen()),
+              );
+            }),
             _buildItem(Icons.key, 'API Keys', () {}),
             _buildItem(Icons.shield, 'Privacy', () {}),
           ]),
