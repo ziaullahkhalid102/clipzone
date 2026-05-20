@@ -6,6 +6,7 @@ import '../../models/video.dart';
 import '../../config/theme.dart';
 import '../login_screen.dart';
 import '../settings/settings_screen.dart';
+import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -194,7 +195,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 40),
               child: OutlinedButton(
-                onPressed: () {},
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const EditProfileScreen()),
+                  );
+                  if (mounted) _loadMyVideos();
+                },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
                   side: const BorderSide(color: AppTheme.dividerColor),

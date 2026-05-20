@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../config/theme.dart';
+import '../providers/notification_provider.dart';
 import 'feed/video_feed_screen.dart';
 import 'discover/discover_screen.dart';
 import 'upload/upload_screen.dart';
+import 'notifications/notifications_screen.dart';
 import 'profile/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -19,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
     VideoFeedScreen(),
     DiscoverScreen(),
     SizedBox(), // Placeholder for upload button
+    NotificationsScreen(),
     ProfileScreen(),
   ];
 
@@ -26,11 +30,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(
-        index: _currentIndex == 2 ? 0 : _currentIndex > 2 ? _currentIndex - 1 : _currentIndex,
+        index: _getStackIndex(),
         children: [
           _screens[0],
           _screens[1],
           _screens[3],
+          _screens[4],
         ],
       ),
       bottomNavigationBar: Container(
@@ -74,6 +79,21 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               label: '',
             ),
+            BottomNavigationBarItem(
+              icon: Consumer<NotificationProvider>(
+                builder: (context, provider, child) {
+                  return Badge(
+                    isLabelVisible: provider.unreadCount > 0,
+                    label: Text(
+                      provider.unreadCount.toString(),
+                      style: const TextStyle(fontSize: 10),
+                    ),
+                    child: const Icon(Icons.notifications_outlined),
+                  );
+                },
+              ),
+              label: 'Inbox',
+            ),
             const BottomNavigationBarItem(
               icon: Icon(Icons.person),
               label: 'Profile',
@@ -82,5 +102,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  int _getStackIndex() {
+    if (_currentIndex < 2) return _currentIndex;
+    if (_currentIndex == 2) return 0; // Upload uses push, fallback to feed
+    return _currentIndex - 1; // 3 -> 2, 4 -> 3
   }
 }

@@ -44,6 +44,18 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<User?> updateProfile({
+    String? name,
+    String? username,
+    String? bio,
+  }) async {
+    return await _userService.updateProfile(
+      name: name,
+      username: username,
+      bio: bio,
+    );
+  }
+
   Future<List<User>> searchUsers(String query) async {
     return await _userService.searchUsers(query);
   }
