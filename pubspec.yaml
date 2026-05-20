@@ -20,6 +20,10 @@ dependencies:
   # Video
   video_player: ^2.9.0
   image_picker: ^1.1.0
+  chewie: ^1.8.0
+  
+  # Auth
+  webview_flutter: ^4.10.0
   
   # UI
   cached_network_image: ^3.4.0

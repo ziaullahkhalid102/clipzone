@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/feed_provider.dart';
+import '../../providers/user_provider.dart';
 import '../../config/theme.dart';
 import '../../models/video.dart';
+import '../../models/user.dart';
+import '../profile/user_profile_screen.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -11,11 +14,14 @@ class DiscoverScreen extends StatefulWidget {
   State<DiscoverScreen> createState() => _DiscoverScreenState();
 }
 
-class _DiscoverScreenState extends State<DiscoverScreen> {
+class _DiscoverScreenState extends State<DiscoverScreen>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
-  List<Video> _searchResults = [];
+  List<Video> _videoResults = [];
+  List<User> _userResults = [];
   bool _isSearching = false;
   bool _hasSearched = false;
+  late TabController _tabController;
 
   final List<String> _trendingTags = [
     'comedy', 'dance', 'food', 'travel', 'music',
@@ -23,8 +29,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -35,9 +48,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       _hasSearched = true;
     });
 
-    final results = await context.read<FeedProvider>().searchVideos(query);
+    final videoFuture = context.read<FeedProvider>().searchVideos(query);
+    final userFuture = context.read<UserProvider>().searchUsers(query);
+
+    final results = await Future.wait([videoFuture, userFuture]);
+
     setState(() {
-      _searchResults = results;
+      _videoResults = results[0] as List<Video>;
+      _userResults = results[1] as List<User>;
       _isSearching = false;
     });
   }
@@ -68,6 +86,20 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 color: Colors.white.withValues(alpha: 0.4),
                 size: 20,
               ),
+              suffixIcon: _hasSearched
+                  ? IconButton(
+                      icon: Icon(Icons.close,
+                          color: Colors.white.withValues(alpha: 0.4), size: 18),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {
+                          _hasSearched = false;
+                          _videoResults = [];
+                          _userResults = [];
+                        });
+                      },
+                    )
+                  : null,
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(vertical: 10),
             ),
@@ -111,9 +143,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   decoration: BoxDecoration(
                     color: AppTheme.darkCard,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: AppTheme.dividerColor,
-                    ),
+                    border: Border.all(color: AppTheme.dividerColor),
                   ),
                   child: Text(
                     '#$tag',
@@ -145,12 +175,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             mainAxisSpacing: 12,
             childAspectRatio: 1.5,
             children: [
-              _buildCategoryCard('Comedy', Icons.sentiment_very_satisfied, Colors.orange),
+              _buildCategoryCard(
+                  'Comedy', Icons.sentiment_very_satisfied, Colors.orange),
               _buildCategoryCard('Music', Icons.music_note, Colors.purple),
-              _buildCategoryCard('Dance', Icons.directions_run, AppTheme.primaryColor),
+              _buildCategoryCard(
+                  'Dance', Icons.directions_run, AppTheme.primaryColor),
               _buildCategoryCard('Food', Icons.restaurant, Colors.green),
               _buildCategoryCard('Travel', Icons.flight, Colors.blue),
-              _buildCategoryCard('Sports', Icons.sports_basketball, Colors.red),
+              _buildCategoryCard(
+                  'Sports', Icons.sports_basketball, Colors.red),
             ],
           ),
         ],
@@ -167,7 +200,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [color.withValues(alpha: 0.8), color.withValues(alpha: 0.4)],
+            colors: [
+              color.withValues(alpha: 0.8),
+              color.withValues(alpha: 0.4)
+            ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -199,7 +235,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       );
     }
 
-    if (_searchResults.isEmpty) {
+    if (_videoResults.isEmpty && _userResults.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -229,6 +265,41 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       );
     }
 
+    return Column(
+      children: [
+        TabBar(
+          controller: _tabController,
+          indicatorColor: AppTheme.primaryColor,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white54,
+          tabs: [
+            Tab(text: 'Videos (${_videoResults.length})'),
+            Tab(text: 'Users (${_userResults.length})'),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildVideoGrid(),
+              _buildUserList(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVideoGrid() {
+    if (_videoResults.isEmpty) {
+      return Center(
+        child: Text(
+          'No videos found',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+        ),
+      );
+    }
+
     return GridView.builder(
       padding: const EdgeInsets.all(2),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -237,9 +308,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         mainAxisSpacing: 2,
         childAspectRatio: 0.65,
       ),
-      itemCount: _searchResults.length,
+      itemCount: _videoResults.length,
       itemBuilder: (context, index) {
-        final video = _searchResults[index];
+        final video = _videoResults[index];
         return Container(
           color: AppTheme.darkCard,
           child: Stack(
@@ -255,9 +326,26 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   ),
                 )
               else
-                const Center(
-                  child: Icon(Icons.play_circle_outline,
-                      color: Colors.white54, size: 40),
+                Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.play_circle_outline,
+                          color: Colors.white54, size: 40),
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Text(
+                          video.caption,
+                          style: const TextStyle(
+                              color: Colors.white38, fontSize: 10),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               Positioned(
                 bottom: 4,
@@ -268,13 +356,72 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     const SizedBox(width: 2),
                     Text(
                       _formatViews(video.views),
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 12),
                     ),
                   ],
                 ),
               ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildUserList() {
+    if (_userResults.isEmpty) {
+      return Center(
+        child: Text(
+          'No users found',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: _userResults.length,
+      itemBuilder: (context, index) {
+        final user = _userResults[index];
+        return ListTile(
+          leading: CircleAvatar(
+            backgroundColor: AppTheme.darkCard,
+            backgroundImage:
+                user.picture != null ? NetworkImage(user.picture!) : null,
+            child: user.picture == null
+                ? Text(
+                    user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                    style: const TextStyle(color: Colors.white),
+                  )
+                : null,
+          ),
+          title: Text(
+            user.name,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            user.username != null ? '@${user.username}' : user.email,
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+          ),
+          trailing: Text(
+            '${user.followersCount} followers',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.4),
+              fontSize: 12,
+            ),
+          ),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => UserProfileScreen(
+                  userId: user.id,
+                  userName: user.name,
+                ),
+              ),
+            );
+          },
         );
       },
     );

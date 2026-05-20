@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart' show Share;
 import '../models/video.dart';
 import '../providers/feed_provider.dart';
 import '../config/theme.dart';
 import '../screens/comments/comments_sheet.dart';
+import '../screens/profile/user_profile_screen.dart';
 
 class ActionBar extends StatefulWidget {
   final Video video;
@@ -14,15 +16,31 @@ class ActionBar extends StatefulWidget {
   State<ActionBar> createState() => _ActionBarState();
 }
 
-class _ActionBarState extends State<ActionBar> {
+class _ActionBarState extends State<ActionBar>
+    with SingleTickerProviderStateMixin {
   late bool _isLiked;
   late int _likesCount;
+  late AnimationController _likeAnimController;
+  late Animation<double> _likeAnim;
 
   @override
   void initState() {
     super.initState();
     _isLiked = widget.video.isLiked;
     _likesCount = widget.video.likesCount;
+    _likeAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _likeAnim = Tween<double>(begin: 1.0, end: 1.3).animate(
+      CurvedAnimation(parent: _likeAnimController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _likeAnimController.dispose();
+    super.dispose();
   }
 
   void _toggleLike() async {
@@ -30,6 +48,9 @@ class _ActionBarState extends State<ActionBar> {
       _isLiked = !_isLiked;
       _likesCount += _isLiked ? 1 : -1;
     });
+    if (_isLiked) {
+      _likeAnimController.forward().then((_) => _likeAnimController.reverse());
+    }
     await context.read<FeedProvider>().likeVideo(widget.video.id);
   }
 
@@ -42,6 +63,25 @@ class _ActionBarState extends State<ActionBar> {
     );
   }
 
+  void _shareVideo() {
+    final caption = widget.video.caption;
+    final hashtags = widget.video.hashtags.map((h) => '#$h').join(' ');
+    final text = 'Check out this clip on ClipZone!\n\n$caption $hashtags';
+    Share.share(text);
+  }
+
+  void _openUserProfile() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UserProfileScreen(
+          userId: widget.video.userId,
+          userName: widget.video.userName,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -51,11 +91,14 @@ class _ActionBarState extends State<ActionBar> {
         _buildProfileAvatar(),
         const SizedBox(height: 20),
         // Like
-        _buildActionButton(
-          icon: _isLiked ? Icons.favorite : Icons.favorite_border,
-          label: _formatCount(_likesCount),
-          color: _isLiked ? AppTheme.primaryColor : Colors.white,
-          onTap: _toggleLike,
+        ScaleTransition(
+          scale: _likeAnim,
+          child: _buildActionButton(
+            icon: _isLiked ? Icons.favorite : Icons.favorite_border,
+            label: _formatCount(_likesCount),
+            color: _isLiked ? AppTheme.primaryColor : Colors.white,
+            onTap: _toggleLike,
+          ),
         ),
         const SizedBox(height: 20),
         // Comment
@@ -69,48 +112,52 @@ class _ActionBarState extends State<ActionBar> {
         _buildActionButton(
           icon: Icons.reply,
           label: _formatCount(widget.video.sharesCount),
-          onTap: () {},
+          onTap: _shareVideo,
         ),
       ],
     );
   }
 
   Widget _buildProfileAvatar() {
-    return Column(
-      children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2),
+    return GestureDetector(
+      onTap: _openUserProfile,
+      child: Column(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+            child: CircleAvatar(
+              backgroundImage: widget.video.userPicture != null
+                  ? NetworkImage(widget.video.userPicture!)
+                  : null,
+              backgroundColor: AppTheme.darkCard,
+              child: widget.video.userPicture == null
+                  ? Text(
+                      widget.video.userName.isNotEmpty
+                          ? widget.video.userName[0].toUpperCase()
+                          : '?',
+                      style:
+                          const TextStyle(color: Colors.white, fontSize: 18),
+                    )
+                  : null,
+            ),
           ),
-          child: CircleAvatar(
-            backgroundImage: widget.video.userPicture != null
-                ? NetworkImage(widget.video.userPicture!)
-                : null,
-            backgroundColor: AppTheme.darkCard,
-            child: widget.video.userPicture == null
-                ? Text(
-                    widget.video.userName.isNotEmpty
-                        ? widget.video.userName[0].toUpperCase()
-                        : '?',
-                    style: const TextStyle(color: Colors.white, fontSize: 18),
-                  )
-                : null,
+          const SizedBox(height: 2),
+          Container(
+            width: 20,
+            height: 20,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppTheme.primaryColor,
+            ),
+            child: const Icon(Icons.add, color: Colors.white, size: 14),
           ),
-        ),
-        const SizedBox(height: 2),
-        Container(
-          width: 20,
-          height: 20,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppTheme.primaryColor,
-          ),
-          child: const Icon(Icons.add, color: Colors.white, size: 14),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
