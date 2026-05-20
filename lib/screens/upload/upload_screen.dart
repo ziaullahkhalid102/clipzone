@@ -2,8 +2,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/feed_provider.dart';
 import '../../config/theme.dart';
+import '../login_screen.dart';
 
 class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
@@ -18,11 +22,16 @@ class _UploadScreenState extends State<UploadScreen> {
   final TextEditingController _hashtagController = TextEditingController();
   final List<String> _hashtags = [];
   bool _isUploading = false;
+  double _uploadProgress = 0;
+  VideoPlayerController? _videoController;
+  ChewieController? _chewieController;
 
   @override
   void dispose() {
     _captionController.dispose();
     _hashtagController.dispose();
+    _chewieController?.dispose();
+    _videoController?.dispose();
     super.dispose();
   }
 
@@ -34,8 +43,29 @@ class _UploadScreenState extends State<UploadScreen> {
     );
 
     if (video != null) {
+      final file = File(video.path);
+      _chewieController?.dispose();
+      _videoController?.dispose();
+
+      final vc = VideoPlayerController.file(file);
+      await vc.initialize();
+
       setState(() {
-        _selectedVideo = File(video.path);
+        _selectedVideo = file;
+        _videoController = vc;
+        _chewieController = ChewieController(
+          videoPlayerController: vc,
+          autoPlay: false,
+          looping: false,
+          aspectRatio: vc.value.aspectRatio,
+          showControls: true,
+          materialProgressColors: ChewieProgressColors(
+            playedColor: AppTheme.primaryColor,
+            handleColor: AppTheme.primaryColor,
+            bufferedColor: Colors.white24,
+            backgroundColor: Colors.white12,
+          ),
+        );
       });
     }
   }
@@ -53,7 +83,34 @@ class _UploadScreenState extends State<UploadScreen> {
   Future<void> _upload() async {
     if (_selectedVideo == null) return;
 
-    setState(() => _isUploading = true);
+    final auth = context.read<AuthProvider>();
+    if (!auth.isLoggedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please sign in to upload videos'),
+          backgroundColor: Colors.orange,
+          action: SnackBarAction(
+            label: 'Sign In',
+            textColor: Colors.white,
+            onPressed: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              );
+            },
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isUploading = true;
+      _uploadProgress = 0;
+    });
+
+    // Simulate progress updates
+    _simulateProgress();
 
     try {
       final feed = context.read<FeedProvider>();
@@ -91,8 +148,24 @@ class _UploadScreenState extends State<UploadScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _isUploading = false);
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+          _uploadProgress = 0;
+        });
+      }
     }
+  }
+
+  void _simulateProgress() {
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (!mounted || !_isUploading) return false;
+      setState(() {
+        _uploadProgress = (_uploadProgress + 0.05).clamp(0.0, 0.95);
+      });
+      return _isUploading && _uploadProgress < 0.95;
+    });
   }
 
   @override
@@ -110,14 +183,23 @@ class _UploadScreenState extends State<UploadScreen> {
           if (_selectedVideo != null)
             TextButton(
               onPressed: _isUploading ? null : _upload,
-              child: Text(
-                'Post',
-                style: TextStyle(
-                  color: _isUploading ? Colors.grey : AppTheme.primaryColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
+              child: _isUploading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.primaryColor,
+                      ),
+                    )
+                  : const Text(
+                      'Post',
+                      style: TextStyle(
+                        color: AppTheme.primaryColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
             ),
         ],
       ),
@@ -169,11 +251,7 @@ class _UploadScreenState extends State<UploadScreen> {
                   shape: BoxShape.circle,
                   color: AppTheme.primaryColor,
                 ),
-                child: const Icon(
-                  Icons.videocam,
-                  color: Colors.white,
-                  size: 36,
-                ),
+                child: const Icon(Icons.videocam, color: Colors.white, size: 36),
               ),
             ),
           ),
@@ -199,7 +277,7 @@ class _UploadScreenState extends State<UploadScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            'Max 60 seconds • 100 MB',
+            'Max 60 seconds \u2022 100 MB',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.4),
               fontSize: 12,
@@ -216,7 +294,7 @@ class _UploadScreenState extends State<UploadScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Video Preview
+          // Video Preview with Chewie Player
           Container(
             width: double.infinity,
             height: 300,
@@ -224,44 +302,68 @@ class _UploadScreenState extends State<UploadScreen> {
               color: AppTheme.darkCard,
               borderRadius: BorderRadius.circular(16),
             ),
+            clipBehavior: Clip.antiAlias,
             child: Stack(
               children: [
-                Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.play_circle_filled,
-                        size: 64,
-                        color: Colors.white54,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _selectedVideo!.path.split('/').last,
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 12,
+                if (_chewieController != null)
+                  Center(child: Chewie(controller: _chewieController!))
+                else
+                  Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.play_circle_filled, size: 64, color: Colors.white54),
+                        const SizedBox(height: 8),
+                        Text(
+                          _selectedVideo!.path.split('/').last,
+                          style: const TextStyle(color: Colors.white54, fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
                 Positioned(
                   top: 8,
                   right: 8,
                   child: IconButton(
-                    onPressed: () => setState(() => _selectedVideo = null),
+                    onPressed: () {
+                      _chewieController?.dispose();
+                      _videoController?.dispose();
+                      setState(() {
+                        _selectedVideo = null;
+                        _chewieController = null;
+                        _videoController = null;
+                      });
+                    },
                     icon: const Icon(Icons.close, color: Colors.white),
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.black54,
-                    ),
+                    style: IconButton.styleFrom(backgroundColor: Colors.black54),
                   ),
                 ),
               ],
             ),
           ),
+          // Upload Progress
+          if (_isUploading) ...[
+            const SizedBox(height: 16),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: _uploadProgress,
+                backgroundColor: AppTheme.darkCard,
+                valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+                minHeight: 6,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Uploading... ${(_uploadProgress * 100).toInt()}%',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.6),
+                fontSize: 13,
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
           // Caption
           const Text(
@@ -324,51 +426,51 @@ class _UploadScreenState extends State<UploadScreen> {
             runSpacing: 8,
             children: _hashtags.map((tag) {
               return Chip(
-                label: Text(
-                  '#$tag',
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                ),
+                label: Text('#$tag', style: const TextStyle(color: Colors.white, fontSize: 13)),
                 backgroundColor: AppTheme.darkCard,
-                deleteIconColor: Colors.white54,
-                onDeleted: () {
-                  setState(() => _hashtags.remove(tag));
-                },
-                side: BorderSide.none,
+                deleteIcon: const Icon(Icons.close, size: 16, color: Colors.white54),
+                onDeleted: () => setState(() => _hashtags.remove(tag)),
+                side: const BorderSide(color: AppTheme.dividerColor),
               );
             }).toList(),
           ),
           const SizedBox(height: 32),
-          // Upload Button
-          if (_isUploading)
-            const Center(
-              child: Column(
-                children: [
-                  CircularProgressIndicator(color: AppTheme.primaryColor),
-                  SizedBox(height: 16),
-                  Text(
-                    'Uploading to Google Drive...',
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                ],
-              ),
-            )
-          else
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _upload,
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(25),
-                  ),
-                ),
-                child: const Text(
-                  'Post Clip',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          // Post Button
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton(
+              onPressed: _isUploading ? null : _upload,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                disabledBackgroundColor: AppTheme.primaryColor.withValues(alpha: 0.4),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
+              child: _isUploading
+                  ? const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Text('Uploading...', style: TextStyle(fontSize: 16)),
+                      ],
+                    )
+                  : const Text(
+                      'Post Clip',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
             ),
+          ),
+          const SizedBox(height: 32),
         ],
       ),
     );

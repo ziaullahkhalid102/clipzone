@@ -1,8 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../providers/auth_provider.dart';
+import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 import '../config/theme.dart';
+import 'auth/webview_login_screen.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatelessWidget {
@@ -18,7 +19,6 @@ class LoginScreen extends StatelessWidget {
           child: Column(
             children: [
               const Spacer(flex: 2),
-              // Logo
               Container(
                 width: 120,
                 height: 120,
@@ -64,14 +64,13 @@ class LoginScreen extends StatelessWidget {
                 ),
               ),
               const Spacer(flex: 2),
-              // Features
               _buildFeature(Icons.videocam, 'Record & Upload Videos'),
               const SizedBox(height: 16),
               _buildFeature(Icons.explore, 'Discover Trending Content'),
               const SizedBox(height: 16),
               _buildFeature(Icons.cloud_done, 'Stored in Your Google Drive'),
               const Spacer(),
-              // Login Button
+              // Google Login Button
               SizedBox(
                 width: double.infinity,
                 height: 54,
@@ -92,11 +91,8 @@ class LoginScreen extends StatelessWidget {
                         'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
                         width: 24,
                         height: 24,
-                        errorBuilder: (context, error, stackTrace) => const Icon(
-                          Icons.g_mobiledata,
-                          size: 28,
-                          color: Colors.red,
-                        ),
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Icon(Icons.g_mobiledata, size: 28, color: Colors.red),
                       ),
                       const SizedBox(width: 12),
                       const Text(
@@ -111,6 +107,23 @@ class LoginScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
+              // Skip Login Button
+              TextButton(
+                onPressed: () {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => const HomeScreen()),
+                  );
+                },
+                child: Text(
+                  'Browse without signing in',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white.withValues(alpha: 0.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
               Text(
                 'By continuing, you agree to our Terms of Service',
                 style: TextStyle(
@@ -152,56 +165,39 @@ class LoginScreen extends StatelessWidget {
   }
 
   Future<void> _handleLogin(BuildContext context) async {
-    final auth = context.read<AuthProvider>();
-    final loginUrl = auth.getLoginUrl();
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.authApi}/google?platform=mobile'),
+      );
 
-    final uri = Uri.parse(loginUrl);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final loginUrl = data['url'] as String;
 
-    // After Google OAuth callback, the app will receive the token
-    // For now, show a dialog to enter token manually (will be replaced with deep linking)
-    if (!context.mounted) return;
-    _showTokenDialog(context);
-  }
-
-  void _showTokenDialog(BuildContext context) {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkCard,
-        title: const Text('Enter Auth Token', style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: controller,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'Paste your token here',
+        if (!context.mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => WebViewLoginScreen(loginUrl: loginUrl),
           ),
+        );
+      } else {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to start login. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Connection error: $e'),
+          backgroundColor: Colors.red,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (controller.text.isNotEmpty) {
-                final auth = ctx.read<AuthProvider>();
-                await auth.handleLoginCallback(controller.text);
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                  Navigator.of(ctx).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const HomeScreen()),
-                  );
-                }
-              }
-            },
-            child: const Text('Login'),
-          ),
-        ],
-      ),
-    );
+      );
+    }
   }
 }
