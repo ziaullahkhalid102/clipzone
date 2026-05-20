@@ -28,8 +28,9 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
           onPageStarted: (_) {
             if (mounted) setState(() => _isLoading = true);
           },
-          onPageFinished: (_) {
+          onPageFinished: (url) {
             if (mounted) setState(() => _isLoading = false);
+            _checkForCallback(url);
           },
           onNavigationRequest: (request) {
             final uri = Uri.parse(request.url);
@@ -39,11 +40,51 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
               return NavigationDecision.prevent;
             }
 
+            // Also check if the callback page has token in URL
+            if (request.url.contains('/auth/google/callback') &&
+                request.url.contains('state=mobile')) {
+              return NavigationDecision.navigate;
+            }
+
             return NavigationDecision.navigate;
+          },
+          onUrlChange: (change) {
+            if (change.url != null) {
+              _checkForCallback(change.url!);
+            }
           },
         ),
       )
       ..loadRequest(Uri.parse(widget.loginUrl));
+  }
+
+  bool _callbackHandled = false;
+
+  void _checkForCallback(String url) {
+    if (_callbackHandled) return;
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+
+    if (uri.scheme == 'clipzone' && uri.host == 'auth') {
+      _callbackHandled = true;
+      _handleAuthCallback(uri);
+      return;
+    }
+
+    // Extract token from callback page content
+    if (url.contains('/auth/google/callback') || url.contains('state=mobile')) {
+      _controller.runJavaScriptReturningResult(
+        'document.querySelector("script")?.textContent || document.body.innerHTML || ""',
+      ).then((result) {
+        final content = result.toString();
+        final tokenMatch = RegExp(r'token=([^&"\\]+)').firstMatch(content);
+        if (tokenMatch != null && !_callbackHandled) {
+          _callbackHandled = true;
+          final token = tokenMatch.group(1)!;
+          _handleAuthCallback(Uri.parse('clipzone://auth?token=$token'));
+        }
+      }).catchError((_) {});
+    }
   }
 
   Future<void> _handleAuthCallback(Uri uri) async {
