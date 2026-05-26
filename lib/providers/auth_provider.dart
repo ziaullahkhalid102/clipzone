@@ -37,6 +37,12 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> refreshUser() async {
+    _user = await _authService.getCurrentUser();
+    _isLoggedIn = _user != null;
+    notifyListeners();
+  }
+
   Future<void> logout() async {
     await _authService.logout();
     _user = null;

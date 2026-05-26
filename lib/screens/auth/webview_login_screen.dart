@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -17,6 +18,8 @@ class WebViewLoginScreen extends StatefulWidget {
 class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
   late final WebViewController _controller;
   bool _isLoading = true;
+  bool _callbackHandled = false;
+  Timer? _tokenCheckTimer;
 
   @override
   void initState() {
@@ -28,25 +31,98 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
           onPageStarted: (_) {
             if (mounted) setState(() => _isLoading = true);
           },
-          onPageFinished: (_) {
+          onPageFinished: (url) {
             if (mounted) setState(() => _isLoading = false);
+            _checkForToken(url);
           },
           onNavigationRequest: (request) {
             final uri = Uri.parse(request.url);
-
             if (uri.scheme == 'clipzone' && uri.host == 'auth') {
-              _handleAuthCallback(uri);
+              _handleToken(uri);
               return NavigationDecision.prevent;
             }
-
             return NavigationDecision.navigate;
+          },
+          onUrlChange: (change) {
+            if (change.url != null) {
+              _checkForToken(change.url!);
+            }
           },
         ),
       )
       ..loadRequest(Uri.parse(widget.loginUrl));
   }
 
-  Future<void> _handleAuthCallback(Uri uri) async {
+  @override
+  void dispose() {
+    _tokenCheckTimer?.cancel();
+    super.dispose();
+  }
+
+  void _checkForToken(String url) {
+    if (_callbackHandled) return;
+
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+
+    // Direct clipzone:// scheme
+    if (uri.scheme == 'clipzone' && uri.host == 'auth') {
+      _handleToken(uri);
+      return;
+    }
+
+    // Callback page - extract token from page content
+    if (url.contains('/auth/google/callback') || url.contains('state=mobile')) {
+      _tokenCheckTimer?.cancel();
+      // Try multiple times with delay - page might not be fully loaded
+      int attempts = 0;
+      _tokenCheckTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+        if (_callbackHandled || attempts >= 10) {
+          timer.cancel();
+          return;
+        }
+        attempts++;
+        _extractTokenFromPage();
+      });
+      // Also try immediately
+      _extractTokenFromPage();
+    }
+  }
+
+  void _extractTokenFromPage() {
+    if (_callbackHandled) return;
+
+    _controller.runJavaScriptReturningResult(
+      'document.body ? document.body.innerHTML : ""',
+    ).then((result) {
+      if (_callbackHandled) return;
+      final content = result.toString();
+      final tokenMatch = RegExp(r'token=([A-Za-z0-9_\-\.]+)').firstMatch(content);
+      if (tokenMatch != null) {
+        _callbackHandled = true;
+        _tokenCheckTimer?.cancel();
+        final token = tokenMatch.group(1)!;
+        _handleToken(Uri.parse('clipzone://auth?token=$token'));
+      }
+    }).catchError((_) {});
+
+    // Also try getting full page source
+    _controller.runJavaScriptReturningResult(
+      'document.documentElement ? document.documentElement.outerHTML : ""',
+    ).then((result) {
+      if (_callbackHandled) return;
+      final content = result.toString();
+      final tokenMatch = RegExp(r'token=([A-Za-z0-9_\-\.]+)').firstMatch(content);
+      if (tokenMatch != null) {
+        _callbackHandled = true;
+        _tokenCheckTimer?.cancel();
+        final token = tokenMatch.group(1)!;
+        _handleToken(Uri.parse('clipzone://auth?token=$token'));
+      }
+    }).catchError((_) {});
+  }
+
+  Future<void> _handleToken(Uri uri) async {
     final token = uri.queryParameters['token'];
     final error = uri.queryParameters['error'];
 
@@ -63,7 +139,7 @@ class _WebViewLoginScreenState extends State<WebViewLoginScreen> {
       return;
     }
 
-    if (token != null) {
+    if (token != null && token.isNotEmpty) {
       final auth = context.read<AuthProvider>();
       await auth.handleLoginCallback(token);
       if (mounted) {

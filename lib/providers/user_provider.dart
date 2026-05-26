@@ -24,24 +24,52 @@ class UserProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    _viewedProfile = await _userService.getProfile(userId);
-    _userVideos = await _videoService.getUserVideos(userId);
+    try {
+      final user = await _userService.getProfile(userId);
+      _viewedProfile = user;
+      if (user != null) {
+        _userVideos = await _videoService.getUserVideos(userId);
+      }
+    } catch (e) {
+      debugPrint('Load profile error: $e');
+    }
 
     _isLoading = false;
     notifyListeners();
   }
 
   Future<void> toggleFollow(String userId) async {
-    _isFollowing = !_isFollowing;
-    notifyListeners();
+    if (_isFollowing) {
+      final result = await _userService.unfollowUser(userId);
+      if (result) {
+        _isFollowing = false;
+        notifyListeners();
+      }
+    } else {
+      final result = await _userService.followUser(userId);
+      _isFollowing = result;
+      notifyListeners();
+    }
+  }
 
-    final result = await _userService.followUser(userId);
-    _isFollowing = result;
-    notifyListeners();
+  Future<bool> updateProfile({
+    String? name,
+    String? username,
+    String? bio,
+  }) async {
+    try {
+      return await _userService.updateProfile(
+        name: name,
+        username: username,
+        bio: bio,
+      );
+    } catch (e) {
+      return false;
+    }
+  }
 
-    // Refresh profile to get updated counts
-    _viewedProfile = await _userService.getProfile(userId);
-    notifyListeners();
+  Future<Map<String, dynamic>?> getUserProfile(String userId) async {
+    return await _userService.getUserProfile(userId);
   }
 
   Future<List<User>> searchUsers(String query) async {
@@ -49,8 +77,6 @@ class UserProvider extends ChangeNotifier {
   }
 
   Future<List<Video>> loadMyVideos(String userId) async {
-    _userVideos = await _videoService.getUserVideos(userId);
-    notifyListeners();
-    return _userVideos;
+    return await _videoService.getUserVideos(userId);
   }
 }

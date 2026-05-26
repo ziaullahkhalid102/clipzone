@@ -25,8 +25,11 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   }
 
   Future<void> _initVideo() async {
+    final url = widget.video.playableUrl;
+    debugPrint('Playing video: $url');
+
     _controller = VideoPlayerController.networkUrl(
-      Uri.parse(widget.video.videoUrl),
+      Uri.parse(url),
     );
 
     try {
@@ -38,6 +41,9 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       }
     } catch (e) {
       debugPrint('Video init error: $e');
+      if (mounted) {
+        setState(() {});
+      }
     }
   }
 
@@ -77,6 +83,37 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
                 child: AspectRatio(
                   aspectRatio: _controller.value.aspectRatio,
                   child: VideoPlayer(_controller),
+                ),
+              )
+            else if (_controller.value.hasError)
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Colors.white.withValues(alpha: 0.5),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Could not load video',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: () {
+                        _controller.dispose();
+                        _isInitialized = false;
+                        _initVideo();
+                      },
+                      icon: const Icon(Icons.refresh, color: AppTheme.primaryColor),
+                      label: const Text('Retry', style: TextStyle(color: AppTheme.primaryColor)),
+                    ),
+                  ],
                 ),
               )
             else
