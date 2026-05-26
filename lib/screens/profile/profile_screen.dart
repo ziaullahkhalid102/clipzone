@@ -6,6 +6,7 @@ import '../../models/video.dart';
 import '../../config/theme.dart';
 import '../login_screen.dart';
 import '../settings/settings_screen.dart';
+import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId;
@@ -109,14 +110,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = auth.user!;
 
     return RefreshIndicator(
-      onRefresh: _loadMyVideos,
+      onRefresh: () async {
+        await auth.refreshUser();
+        await _loadMyVideos();
+      },
       color: AppTheme.primaryColor,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
           children: [
             const SizedBox(height: 20),
-            // Avatar
             CircleAvatar(
               radius: 50,
               backgroundColor: AppTheme.darkCard,
@@ -163,38 +166,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Text(
                   user.bio!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    fontSize: 14,
+                  ),
                 ),
               ),
             ],
             const SizedBox(height: 20),
-            // Stats Row
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildStat(user.followingCount.toString(), 'Following'),
-                Container(
-                  width: 1,
-                  height: 30,
-                  color: AppTheme.dividerColor,
-                  margin: const EdgeInsets.symmetric(horizontal: 24),
-                ),
-                _buildStat(user.followersCount.toString(), 'Followers'),
-                Container(
-                  width: 1,
-                  height: 30,
-                  color: AppTheme.dividerColor,
-                  margin: const EdgeInsets.symmetric(horizontal: 24),
-                ),
-                _buildStat(_myVideos.length.toString(), 'Clips'),
+                _buildStat('${user.followingCount}', 'Following'),
+                const SizedBox(width: 40),
+                _buildStat('${user.followersCount}', 'Followers'),
+                const SizedBox(width: 40),
+                _buildStat('${_myVideos.length}', 'Clips'),
               ],
             ),
             const SizedBox(height: 20),
-            // Edit Profile Button
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: OutlinedButton(
-                onPressed: () {},
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const EditProfileScreen()),
+                  );
+                  _loadMyVideos();
+                },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
                   side: const BorderSide(color: AppTheme.dividerColor),
@@ -207,7 +208,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            // Video Grid
             const Divider(color: AppTheme.dividerColor, height: 1),
             Container(
               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -263,85 +263,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               )
             else
-              _buildVideoGrid(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVideoGrid() {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(2),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 2,
-        mainAxisSpacing: 2,
-        childAspectRatio: 9 / 16,
-      ),
-      itemCount: _myVideos.length,
-      itemBuilder: (context, index) {
-        final video = _myVideos[index];
-        return _buildVideoTile(video);
-      },
-    );
-  }
-
-  Widget _buildVideoTile(Video video) {
-    return Container(
-      color: AppTheme.darkCard,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (video.thumbnailUrl != null)
-            Image.network(
-              video.thumbnailUrl!,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => _buildVideoPlaceholder(video),
-            )
-          else
-            _buildVideoPlaceholder(video),
-          // Views count overlay
-          Positioned(
-            bottom: 4,
-            left: 4,
-            child: Row(
-              children: [
-                const Icon(Icons.play_arrow, color: Colors.white, size: 16),
-                const SizedBox(width: 2),
-                Text(
-                  _formatCount(video.views),
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(2),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 2,
+                  mainAxisSpacing: 2,
+                  childAspectRatio: 9 / 16,
                 ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVideoPlaceholder(Video video) {
-    return Container(
-      color: AppTheme.darkCard,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.videocam, color: Colors.white38, size: 32),
-            const SizedBox(height: 4),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                video.caption,
-                style: const TextStyle(color: Colors.white38, fontSize: 10),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
+                itemCount: _myVideos.length,
+                itemBuilder: (context, index) {
+                  final video = _myVideos[index];
+                  return Container(
+                    color: AppTheme.darkCard,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Center(
+                          child: Icon(
+                            Icons.play_circle_outline,
+                            color: Colors.white.withValues(alpha: 0.5),
+                            size: 40,
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 4,
+                          left: 4,
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.play_arrow,
+                                color: Colors.white,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                '${video.views}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
-            ),
           ],
         ),
       ),
@@ -369,11 +341,5 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ],
     );
-  }
-
-  String _formatCount(int count) {
-    if (count >= 1000000) return '${(count / 1000000).toStringAsFixed(1)}M';
-    if (count >= 1000) return '${(count / 1000).toStringAsFixed(1)}K';
-    return count.toString();
   }
 }

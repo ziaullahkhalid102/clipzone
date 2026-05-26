@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import '../config/api_config.dart';
 import '../config/theme.dart';
-import 'auth/webview_login_screen.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatelessWidget {
@@ -70,7 +70,6 @@ class LoginScreen extends StatelessWidget {
               const SizedBox(height: 16),
               _buildFeature(Icons.cloud_done, 'Stored in Your Google Drive'),
               const Spacer(),
-              // Google Login Button
               SizedBox(
                 width: double.infinity,
                 height: 54,
@@ -107,7 +106,6 @@ class LoginScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              // Skip Login Button
               TextButton(
                 onPressed: () {
                   Navigator.pushReplacement(
@@ -166,35 +164,52 @@ class LoginScreen extends StatelessWidget {
 
   Future<void> _handleLogin(BuildContext context) async {
     try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(
+          child: CircularProgressIndicator(color: AppTheme.primaryColor),
+        ),
+      );
+
       final response = await http.get(
         Uri.parse('${ApiConfig.authApi}/google?platform=mobile'),
       );
+
+      if (!context.mounted) return;
+      Navigator.pop(context);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final loginUrl = data['url'] as String;
 
-        if (!context.mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => WebViewLoginScreen(loginUrl: loginUrl),
-          ),
-        );
+        final uri = Uri.parse(loginUrl);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } else {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Could not open browser. Please try again.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
       } else {
-        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Failed to start login. Please try again.'),
+            content: Text('Failed to connect to server. Please try again.'),
             backgroundColor: Colors.red,
           ),
         );
       }
     } catch (e) {
       if (!context.mounted) return;
+      Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Connection error: $e'),
+          content: Text('Connection error: ${e.toString().length > 50 ? 'Could not reach server' : e}'),
           backgroundColor: Colors.red,
         ),
       );
