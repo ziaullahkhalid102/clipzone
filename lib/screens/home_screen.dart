@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../config/theme.dart';
+import '../providers/notification_provider.dart';
 import 'feed/video_feed_screen.dart';
 import 'discover/discover_screen.dart';
 import 'upload/upload_screen.dart';
+import 'notifications/notifications_screen.dart';
 import 'profile/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -18,19 +21,33 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Widget> _screens = const [
     VideoFeedScreen(),
     DiscoverScreen(),
-    SizedBox(), // Placeholder for upload button
+    SizedBox(), // Upload placeholder
+    NotificationsScreen(),
     ProfileScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      if (mounted) {
+        context.read<NotificationProvider>().refreshUnreadCount();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(
-        index: _currentIndex == 2 ? 0 : _currentIndex > 2 ? _currentIndex - 1 : _currentIndex,
+        index: _currentIndex >= 2
+            ? (_currentIndex > 2 ? _currentIndex - 1 : 0)
+            : _currentIndex,
         children: [
           _screens[0],
           _screens[1],
           _screens[3],
+          _screens[4],
         ],
       ),
       bottomNavigationBar: Container(
@@ -73,6 +90,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: const Icon(Icons.add, color: Colors.white, size: 22),
               ),
               label: '',
+            ),
+            BottomNavigationBarItem(
+              icon: Consumer<NotificationProvider>(
+                builder: (context, provider, child) {
+                  return Badge(
+                    isLabelVisible: provider.unreadCount > 0,
+                    label: Text('${provider.unreadCount}'),
+                    child: const Icon(Icons.inbox),
+                  );
+                },
+              ),
+              label: 'Inbox',
             ),
             const BottomNavigationBarItem(
               icon: Icon(Icons.person),

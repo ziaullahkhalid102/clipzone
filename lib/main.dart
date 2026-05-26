@@ -4,9 +4,13 @@ import 'package:provider/provider.dart';
 import 'config/theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/feed_provider.dart';
+import 'providers/user_provider.dart';
+import 'providers/notification_provider.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'services/video_service.dart';
+import 'services/user_service.dart';
+import 'services/notification_service.dart';
 import 'screens/splash_screen.dart';
 
 void main() {
@@ -22,12 +26,18 @@ void main() {
   final apiService = ApiService();
   final authService = AuthService(apiService);
   final videoService = VideoService(apiService);
+  final userService = UserService(apiService);
+  final notificationService = NotificationService(apiService);
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider(authService)),
         ChangeNotifierProvider(create: (_) => FeedProvider(videoService)),
+        ChangeNotifierProvider(
+            create: (_) => UserProvider(userService, videoService)),
+        ChangeNotifierProvider(
+            create: (_) => NotificationProvider(notificationService)),
       ],
       child: const ClipZoneApp(),
     ),
