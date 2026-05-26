@@ -8,6 +8,7 @@ class Video {
   final List<String> hashtags;
   final String? thumbnailUrl;
   final String videoUrl;
+  final String? streamUrl;
   final int duration;
   final int views;
   final int likesCount;
@@ -26,6 +27,7 @@ class Video {
     this.hashtags = const [],
     this.thumbnailUrl,
     required this.videoUrl,
+    this.streamUrl,
     this.duration = 0,
     this.views = 0,
     this.likesCount = 0,
@@ -34,6 +36,8 @@ class Video {
     this.isLiked = false,
     required this.createdAt,
   });
+
+  String get playableUrl => streamUrl ?? videoUrl;
 
   factory Video.fromJson(Map<String, dynamic> json) {
     return Video(
@@ -46,6 +50,7 @@ class Video {
       hashtags: List<String>.from(json['hashtags'] ?? []),
       thumbnailUrl: json['thumbnailUrl'],
       videoUrl: json['videoUrl'] ?? '',
+      streamUrl: json['streamUrl'],
       duration: json['duration'] ?? 0,
       views: json['views'] ?? 0,
       likesCount: json['likesCount'] ?? 0,

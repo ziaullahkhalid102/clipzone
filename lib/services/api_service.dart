@@ -46,6 +46,18 @@ class ApiService {
     return _handleResponse(response);
   }
 
+  Future<Map<String, dynamic>> put(
+    String url, {
+    Map<String, dynamic>? body,
+  }) async {
+    final response = await http.put(
+      Uri.parse(url),
+      headers: _authHeaders,
+      body: body != null ? jsonEncode(body) : null,
+    );
+    return _handleResponse(response);
+  }
+
   Future<Map<String, dynamic>> delete(String url) async {
     final response = await http.delete(
       Uri.parse(url),

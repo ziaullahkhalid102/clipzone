@@ -107,7 +107,7 @@ class LoginScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              // Skip Login Button
+              // Browse without signing in
               TextButton(
                 onPressed: () {
                   Navigator.pushReplacement(
@@ -166,15 +166,27 @@ class LoginScreen extends StatelessWidget {
 
   Future<void> _handleLogin(BuildContext context) async {
     try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(
+          child: CircularProgressIndicator(color: AppTheme.primaryColor),
+        ),
+      );
+
+      // Get Google OAuth URL from backend
       final response = await http.get(
         Uri.parse('${ApiConfig.authApi}/google?platform=mobile'),
       );
+
+      if (!context.mounted) return;
+      Navigator.pop(context); // Remove loading
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final loginUrl = data['url'] as String;
 
-        if (!context.mounted) return;
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -182,19 +194,19 @@ class LoginScreen extends StatelessWidget {
           ),
         );
       } else {
-        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Failed to start login. Please try again.'),
+            content: Text('Failed to connect to server. Please try again.'),
             backgroundColor: Colors.red,
           ),
         );
       }
     } catch (e) {
       if (!context.mounted) return;
+      Navigator.pop(context); // Remove loading
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Connection error: $e'),
+          content: Text('Connection error: ${e.toString().length > 50 ? 'Could not reach server' : e}'),
           backgroundColor: Colors.red,
         ),
       );
